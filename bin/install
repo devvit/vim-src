@@ -36,7 +36,7 @@ docker run -i --rm \
     $PROXY_ARGS \
     -v "$INSTALL_PATH":/usr/local \
     -w /tmp \
-    alpine /bin/sh <<EOF
+    alpine:3.9.5 /bin/sh <<EOF
 set -e
 
 # 安装依赖
