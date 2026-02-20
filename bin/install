@@ -1,65 +1,72 @@
 #!/usr/bin/env bash
 
-#!/usr/bin/env bash
-
 set -euo pipefail
 
-# asdf 提供的环境变量
+# 1. 捕获 asdf 环境变量
 # $ASDF_INSTALL_TYPE: version 或 ref
-# $ASDF_INSTALL_VERSION: 具体版本号, 例如 8.1.1045
-# $ASDF_INSTALL_PATH: 安装目标路径
-
+# $ASDF_INSTALL_VERSION: 版本号
+# $ASDF_INSTALL_PATH: 插件安装的目标目录
 VERSION="$ASDF_INSTALL_VERSION"
 INSTALL_PATH="$ASDF_INSTALL_PATH"
 
-echo "### 开始通过 Docker 编译 Vim $VERSION ###"
+# 2. 自动捕获并构建代理参数
+# 如果宿主机定义了 https_proxy 或 http_proxy，则生成 Docker 的 -e 参数
+PROXY_ARGS=""
+[ -n "${https_proxy:-}" ] && PROXY_ARGS="$PROXY_ARGS -e https_proxy=$https_proxy"
+[ -n "${http_proxy:-}" ] && PROXY_ARGS="$PROXY_ARGS -e http_proxy=$http_proxy"
 
-# 1. 确保目标目录存在
+# 如果代理是指向 localhost/127.0.0.1，容器内部无法直接访问
+# 建议在这种情况下使用 --network host
+if [[ "$PROXY_ARGS" == *"127.0.0.1"* ]] || [[ "$PROXY_ARGS" == *"localhost"* ]]; then
+    NETWORK_MODE="--network host"
+else
+    NETWORK_MODE=""
+fi
+
+echo "--- 开始编译 Vim $VERSION ---"
+echo "代理配置: ${PROXY_ARGS:-无}"
+
+# 3. 创建目标目录
 mkdir -p "$INSTALL_PATH"
 
-# 2. 运行 Docker 容器进行静态编译
-# 我们将 ASDF_INSTALL_PATH 挂载到容器内部，直接将编译结果写进去
+# 4. 执行 Docker 编译过程
+# 关键：将 $INSTALL_PATH 挂载到容器的 /usr/local
 docker run -i --rm \
+    $NETWORK_MODE \
+    $PROXY_ARGS \
     -v "$INSTALL_PATH":/usr/local \
     -w /tmp \
     alpine /bin/sh <<EOF
 set -e
 
-# 安装编译依赖
+# 安装依赖
 apk add gcc make musl-dev ncurses-static ncurses-dev wget tar
 
-# 下载并解压
-wget https://github.com/vim/vim/archive/v${VERSION}.tar.gz
-tar -xzf v${VERSION}.tar.gz
+# 下载源码
+echo "正在下载源码..."
+wget "https://github.com/vim/vim/archive/v${VERSION}.tar.gz" -O vim.tar.gz
+tar -xzf vim.tar.gz
 cd vim-*
 
-# 配置与编译
-# 注意：LDFLAGS="-static" 配合 ncurses-static 实现静态链接，增强可移植性
+# 配置静态编译
 LDFLAGS="-static" ./configure \
-    --disable-channel \
-    --disable-gpm \
-    --disable-gtktest \
-    --disable-gui \
-    --disable-netbeans \
     --disable-nls \
-    --disable-selinux \
-    --disable-smack \
-    --disable-sysmouse \
-    --disable-xsmp \
+    --disable-gui \
     --enable-multibyte \
     --with-features=huge \
     --without-x \
     --with-tlib=ncursesw
 
+# 编译并安装到容器的 /usr/local (即宿主机的 \$INSTALL_PATH)
 make -j$(nproc)
 make install
 
-# 清理无用的符号信息以减小体积
+# 清理符号表减小体积
 strip /usr/local/bin/vim
 EOF
 
-# 3. 修复权限（因为 Docker 内部通常以 root 运行）
+# 5. 权限修复
+# Docker 产出的文件属于 root，需要归还给当前用户
 sudo chown -R "$(id -u):$(id -g)" "$INSTALL_PATH"
 
-echo "### Vim $VERSION 安装完成！ ###"
-echo "安装路径: $INSTALL_PATH"
+echo "--- Vim $VERSION 安装成功 ---"
