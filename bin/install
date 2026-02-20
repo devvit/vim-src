@@ -63,6 +63,10 @@ make install
 
 # 清理符号表减小体积
 strip /usr/local/bin/vim
+
+# 关键：在容器内部执行 chown，传入宿主机的 UID/GID
+# 这样容器一退出，宿主机上的文件就已经是正确的权限了
+chown -R $(id -u):$(id -g) /usr/local
 EOF
 
 # 5. 权限修复
