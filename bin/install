@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# asdf 提供的环境变量
+# $ASDF_INSTALL_TYPE: version 或 ref
+# $ASDF_INSTALL_VERSION: 具体版本号, 例如 8.1.1045
+# $ASDF_INSTALL_PATH: 安装目标路径
+
+VERSION="$ASDF_INSTALL_VERSION"
+INSTALL_PATH="$ASDF_INSTALL_PATH"
+
+echo "### 开始通过 Docker 编译 Vim $VERSION ###"
+
+# 1. 确保目标目录存在
+mkdir -p "$INSTALL_PATH"
+
+# 2. 运行 Docker 容器进行静态编译
+# 我们将 ASDF_INSTALL_PATH 挂载到容器内部，直接将编译结果写进去
+docker run -i --rm \
+    -v "$INSTALL_PATH":/usr/local \
+    -w /tmp \
+    alpine /bin/sh <<EOF
+set -e
+
+# 安装编译依赖
+apk add gcc make musl-dev ncurses-static ncurses-dev wget tar
+
+# 下载并解压
+wget https://github.com/vim/vim/archive/v${VERSION}.tar.gz
+tar -xzf v${VERSION}.tar.gz
+cd vim-*
+
+# 配置与编译
+# 注意：LDFLAGS="-static" 配合 ncurses-static 实现静态链接，增强可移植性
+LDFLAGS="-static" ./configure \
+    --disable-channel \
+    --disable-gpm \
+    --disable-gtktest \
+    --disable-gui \
+    --disable-netbeans \
+    --disable-nls \
+    --disable-selinux \
+    --disable-smack \
+    --disable-sysmouse \
+    --disable-xsmp \
+    --enable-multibyte \
+    --with-features=huge \
+    --without-x \
+    --with-tlib=ncursesw
+
+make -j$(nproc)
+make install
+
+# 清理无用的符号信息以减小体积
+strip /usr/local/bin/vim
+EOF
+
+# 3. 修复权限（因为 Docker 内部通常以 root 运行）
+sudo chown -R "$(id -u):$(id -g)" "$INSTALL_PATH"
+
+echo "### Vim $VERSION 安装完成！ ###"
+echo "安装路径: $INSTALL_PATH"
