@@ -69,8 +69,4 @@ strip /usr/local/bin/vim
 chown -R $(id -u):$(id -g) /usr/local
 EOF
 
-# 5. 权限修复
-# Docker 产出的文件属于 root，需要归还给当前用户
-sudo chown -R "$(id -u):$(id -g)" "$INSTALL_PATH"
-
 echo "--- Vim $VERSION 安装成功 ---"
