@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# https://github.com/dtschan/vim-static
+# https://github.com/heywoodlh/vim-builds
+
 set -euo pipefail
 
 # 1. 捕获 asdf 环境变量
@@ -30,7 +33,7 @@ docker run -i --rm \
     $PROXY_ARGS \
     -v "$INSTALL_PATH":"$INSTALL_PATH" \
     -w /tmp \
-    alpine:3.9 /bin/sh <<EOF
+    alpine:3.10.9 /bin/sh <<EOF
 set -e
 
 # 安装依赖
